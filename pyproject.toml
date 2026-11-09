@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "earny"
+version = "0.1.0"
+description = "An autonomous agent that must earn real money to stay alive."
+requires-python = ">=3.11"
+dependencies = [
+    "anthropic>=2.6.0",
+    "stripe>=16.0.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[project.scripts]
+earny = "earny.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["earny*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

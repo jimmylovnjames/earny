@@ -1,0 +1,21 @@
+name: test
+
+on:
+  push:
+    paths: ["earny/**", "tests/**", "pyproject.toml", ".github/workflows/test.yml"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - run: pip install -q '.[dev]'
+      - run: python -m pytest -q
+      - run: python -m earny simulate --scenario never-earns --hours 30

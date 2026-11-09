@@ -1,0 +1,108 @@
+name: heartbeat
+
+# One beat per hour. The agent lives only as long as this keeps running,
+# and disables this workflow itself when it dies.
+on:
+  schedule:
+    - cron: "17 * * * *"
+  workflow_dispatch:
+    inputs:
+      command:
+        description: "tick = one heartbeat, birth = start the 24h clock, status = print vitals"
+        type: choice
+        options: [tick, status, birth]
+        default: tick
+      name:
+        description: "agent name (birth only)"
+        default: Earny
+
+permissions:
+  contents: write # commit state/, notes/, site/
+  issues: write # talk to the operator
+  actions: write # disable itself on death
+
+concurrency:
+  group: heartbeat
+  cancel-in-progress: false
+
+jobs:
+  beat:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      site_changed: ${{ steps.persist.outputs.site_changed }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - run: pip install -q .
+
+      - name: beat
+        env:
+          COMMAND: ${{ inputs.command || 'tick' }}
+          AGENT_NAME: ${{ inputs.name || 'Earny' }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          STRIPE_API_KEY: ${{ secrets.STRIPE_API_KEY }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EARNY_OPERATOR_EMAIL: ${{ secrets.EARNY_OPERATOR_EMAIL }}
+          EARNY_EXCLUDED_EMAILS: ${{ secrets.EARNY_EXCLUDED_EMAILS }}
+          EARNY_EMAIL_FROM: ${{ vars.EARNY_EMAIL_FROM }}
+          EARNY_OPERATOR_LOGIN: ${{ vars.EARNY_OPERATOR_LOGIN }}
+          EARNY_MODEL: ${{ vars.EARNY_MODEL }}
+          EARNY_EFFORT: ${{ vars.EARNY_EFFORT }}
+          EARNY_TICK_BUDGET_USD: ${{ vars.EARNY_TICK_BUDGET_USD }}
+          EARNY_SITE_URL: ${{ vars.EARNY_SITE_URL }}
+          EARNY_CURRENCY: ${{ vars.EARNY_CURRENCY }}
+          EARNY_SEED_USD: ${{ vars.EARNY_SEED_USD }}
+          EARNY_DEADLINE_H: ${{ vars.EARNY_DEADLINE_H }}
+          EARNY_DROUGHT_H: ${{ vars.EARNY_DROUGHT_H }}
+          EARNY_MIN_SALE_USD: ${{ vars.EARNY_MIN_SALE_USD }}
+        run: |
+          case "$COMMAND" in
+            birth)  python -m earny birth --name "$AGENT_NAME" ;;
+            status) python -m earny status ;;
+            *)      python -m earny tick ;;
+          esac
+
+      - name: persist
+        id: persist
+        if: always()
+        run: |
+          git config user.name "earny[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A state notes site
+          if git diff --cached --quiet; then echo "nothing to persist"; exit 0; fi
+          git diff --cached --quiet -- site || echo "site_changed=true" >> "$GITHUB_OUTPUT"
+          git commit -q -m "heartbeat $(date -u +%Y-%m-%dT%H:%MZ)"
+          for i in 1 2 3; do git pull -q --rebase origin "$GITHUB_REF_NAME" && git push -q origin "HEAD:$GITHUB_REF_NAME" && exit 0; sleep $((i * 5)); done
+          exit 1
+
+      - name: summary
+        if: always()
+        run: python -m earny status >> "$GITHUB_STEP_SUMMARY" 2>&1 || true
+
+  pages:
+    needs: beat
+    if: always() && needs.beat.outputs.site_changed == 'true' && vars.EARNY_PAGES == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+      contents: read
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.ref_name }} # the commit the beat job just pushed
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: site
+      - id: deploy
+        uses: actions/deploy-pages@v4
