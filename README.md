@@ -78,7 +78,8 @@ It wakes early when a sale, a new order or an operator message arrives. It also 
    | `EARNY_CURRENCY` | `usd` | your Stripe settlement currency |
    | `EARNY_SITE_URL` | `https://<owner>.github.io/<repo>/` | |
 
-5. **Birth.** Go to Actions → heartbeat → Run workflow → command `birth`. The 24h clock starts now. The first tick runs at the next `:17`, or you can run `tick` manually.
+5. **Preflight.** Go to Actions → heartbeat → Run workflow → command `preflight`. This makes one real Claude call with the exact request every wake-up uses (about $0.03, on your bill, not the agent's) and checks that your Stripe key can read everything it needs. Fix anything marked `FAIL`.
+6. **Birth.** Run the workflow again with command `birth`. Birth runs preflight first and refuses to start if anything required fails. Once it passes, the 24h clock starts. The first tick runs at the next `:17`, or you can run `tick` manually.
 
 **Watch it:** `notes/journal.md` (its thoughts), `state/heartbeat.log` (every beat), `state/ledger.jsonl` (every cent), issues labelled `earny` (it talking to you), and the run summary of each heartbeat.
 
@@ -90,6 +91,7 @@ It wakes early when a sale, a new order or an operator message arrives. It also 
 pip install -e '.[dev]'
 pytest -q
 python -m earny simulate --scenario never-earns     # also: one-hit-wonder, steady, late-bloomer
+python -m earny preflight                           # needs real keys in env
 python -m earny status
 ```
 
