@@ -15,6 +15,8 @@ def main(argv: list[str] | None = None) -> int:
     b = sub.add_parser("birth", help="start a life (starts the clock)")
     b.add_argument("--name", default="Earny")
     b.add_argument("--reincarnate", action="store_true", help="archive the current life and start a new one")
+    b.add_argument("--skip-preflight", action="store_true", help="start the clock without checking keys (not advised)")
+    sub.add_parser("preflight", help="check API keys and permissions with real calls (~$0.03), before birth")
     sub.add_parser("tick", help="one heartbeat (run hourly)")
     sub.add_parser("status", help="vitals and countdown")
     sub.add_parser("verify", help="verify the ledger hash chain")
@@ -33,6 +35,14 @@ def main(argv: list[str] | None = None) -> int:
     settings = Settings.from_env()
     heart = Heart(settings)
     try:
+        if a.cmd in ("preflight", "birth") and not getattr(a, "skip_preflight", False):
+            from . import preflight
+            text, ok = preflight.report(preflight.run(settings))
+            print(text)
+            if not ok:
+                return 5
+            if a.cmd == "preflight":
+                return 0
         if a.cmd == "birth":
             life = heart.birth(a.name, Rules.from_env(), reincarnate=a.reincarnate)
             print(f"born: {life.name} ({life.id}) at {life.born_at}; rules {json.dumps(life.rules)}")

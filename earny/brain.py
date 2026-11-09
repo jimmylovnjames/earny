@@ -39,6 +39,24 @@ def server_tools(model: str, max_uses: int) -> list[dict]:
             {"type": "web_fetch_20250910", "name": "web_fetch", "max_uses": max_uses}]
 
 
+def build_request(s: Settings, system: str, messages: list, max_tokens: int = 16000) -> dict[str, Any]:
+    """The exact request every wake-up sends. Shared with `earny preflight`."""
+    kwargs: dict[str, Any] = dict(
+        model=s.model,
+        max_tokens=max_tokens,
+        system=[{"type": "text", "text": system}],
+        messages=messages,
+        tools=TOOL_SPECS + server_tools(s.model, s.web_max_uses_per_call),
+        thinking={"type": "adaptive"},
+        output_config={"effort": s.effort},
+        cache_control={"type": "ephemeral"},
+    )
+    if s.model in FALLBACK_MODELS:
+        kwargs["betas"] = ["server-side-fallback-2026-07-01"]
+        kwargs["fallbacks"] = "default"
+    return kwargs
+
+
 class Brain:
     def __init__(self, client: Any, settings: Settings, ctx: ToolContext,
                  charge: Callable[[int, dict], None], balance: Callable[[], int]):
@@ -49,20 +67,7 @@ class Brain:
         self.balance = balance  # current balance in micros
 
     def _request(self, system: str, messages: list) -> Any:
-        kwargs: dict[str, Any] = dict(
-            model=self.s.model,
-            max_tokens=16000,
-            system=[{"type": "text", "text": system}],
-            messages=messages,
-            tools=TOOL_SPECS + server_tools(self.s.model, self.s.web_max_uses_per_call),
-            thinking={"type": "adaptive"},
-            output_config={"effort": self.s.effort},
-            cache_control={"type": "ephemeral"},
-        )
-        if self.s.model in FALLBACK_MODELS:
-            kwargs["betas"] = ["server-side-fallback-2026-07-01"]
-            kwargs["fallbacks"] = "default"
-        return self.client.beta.messages.create(**kwargs)
+        return self.client.beta.messages.create(**build_request(self.s, system, messages))
 
     def run(self, system: str, wake_message: str) -> TickReport:
         rep = TickReport()
@@ -86,6 +91,10 @@ class Brain:
                 break
             except anthropic.APIConnectionError as e:
                 rep.errors.append(f"connection: {e}"[:300])
+                rep.stop = "api_error"
+                break
+            except Exception as e:  # e.g. missing credentials raise TypeError before any request
+                rep.errors.append(f"{type(e).__name__}: {e}"[:300])
                 rep.stop = "api_error"
                 break
 

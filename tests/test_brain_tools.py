@@ -109,3 +109,9 @@ def test_tools_without_integrations_fail_softly(settings, clock):
                        ("ask_operator", dict(issue_number=0, title="t", body="b"))]:
         out, err = run_tool(ctx, name, args)
         assert err and "configured" in out
+
+
+def test_missing_credentials_is_an_api_error_not_a_crash(settings, clock):
+    brain, _, _, charges = make(settings, clock, [TypeError("Could not resolve authentication method")])
+    rep = brain.run("sys", "wake")
+    assert rep.stop == "api_error" and charges == [] and "authentication" in rep.errors[0]

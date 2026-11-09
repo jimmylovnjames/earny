@@ -8,9 +8,9 @@ on:
   workflow_dispatch:
     inputs:
       command:
-        description: "tick = one heartbeat, birth = start the 24h clock, status = print vitals"
+        description: "preflight = check keys (run first), birth = start the 24h clock, tick = one heartbeat, status = vitals"
         type: choice
-        options: [tick, status, birth]
+        options: [tick, status, preflight, birth]
         default: tick
       name:
         description: "agent name (birth only)"
@@ -65,6 +65,7 @@ jobs:
           case "$COMMAND" in
             birth)  python -m earny birth --name "$AGENT_NAME" ;;
             status) python -m earny status ;;
+            preflight) python -m earny preflight ;;
             *)      python -m earny tick ;;
           esac
 
